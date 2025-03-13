@@ -5,6 +5,7 @@ from bot.database import (
     is_id_verified,
 )
 from bot.verify import validate_verification_code, verify_email
+from bot.logging import log_info, log_warning, log_error, log_exception
 
 
 class EmailInputModal(discord.ui.Modal, title="Verify University Email"):
@@ -27,13 +28,28 @@ class EmailInputModal(discord.ui.Modal, title="Verify University Email"):
         user_id = interaction.user.id
         email = self.email.value
 
-        message, is_error = await verify_email(user_id, email)
+        log_info(f"User {user_id} submitted email for verification: {email}")
 
-        if is_error:
-            await interaction.followup.send(message, ephemeral=True)
-        else:
+        try:
+            message, is_error = await verify_email(user_id, email)
+
+            if is_error:
+                log_error(
+                    f"Email verification failed for {user_id} with email {email}: {message}"
+                )
+                await interaction.followup.send(message, ephemeral=True)
+            else:
+                log_info(
+                    f"Verification code sent successfully to {user_id} with email {email}"
+                )
+                await interaction.followup.send(
+                    "Verification code sent successfully! Check your email.",
+                    ephemeral=True,
+                )
+        except Exception as e:
+            log_exception(f"Error while verifying email for user {user_id}: {e}")
             await interaction.followup.send(
-                "Verification code sent successfully! Check your email.", ephemeral=True
+                "An error occurred while processing your request.", ephemeral=True
             )
 
 
@@ -54,25 +70,39 @@ class VerificationCodeInputModal(discord.ui.Modal, title="Verify University Emai
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer()
 
+        user_id = interaction.user.id
         verification_code = self.verification_code.value
 
-        message, is_error = validate_verification_code(
-            interaction.user.id, verification_code
-        )
+        log_info(f"User {user_id} submitted verification code: {verification_code}")
 
-        if is_error:
-            await interaction.followup.send(message, ephemeral=True)
-        else:
-            role = interaction.guild.get_role(VERIFIED_ROLE_ID)  # type: ignore
+        try:
+            message, is_error = validate_verification_code(user_id, verification_code)
 
-            if role is None:
+            if is_error:
+                log_error(f"Verification failed for user {user_id}: {message}")
+                await interaction.followup.send(message, ephemeral=True)
+            else:
+                role = interaction.guild.get_role(VERIFIED_ROLE_ID)  # type: ignore
+
+                if role is None:
+                    log_warning(
+                        f"Role with ID {VERIFIED_ROLE_ID} not found for user {user_id}"
+                    )
+                    await interaction.followup.send(
+                        "Email verified. Welcome!", ephemeral=True
+                    )
+                    return
+
+                await interaction.user.add_roles(role)  # type: ignore
+                log_info(f"Added verified role to user {user_id}")
                 await interaction.followup.send(
                     "Email verified. Welcome!", ephemeral=True
                 )
-                return
-
-            await interaction.user.add_roles(role)  # type: ignore
-            await interaction.followup.send("Email verified. Welcome!", ephemeral=True)
+        except Exception as e:
+            log_exception(f"Error while verifying code for user {user_id}: {e}")
+            await interaction.followup.send(
+                "An error occurred while processing your request.", ephemeral=True
+            )
 
 
 class View(discord.ui.View):
@@ -80,33 +110,56 @@ class View(discord.ui.View):
     async def callback(self, interaction: discord.Interaction, button):
         user_id = interaction.user.id
 
-        if is_id_pending(user_id):
-            modal = VerificationCodeInputModal()
-        elif is_id_verified(user_id):
-            await interaction.response.send_message(
-                "Email is already verified", ephemeral=True
-            )
-            return
-        else:
-            modal = EmailInputModal()
+        log_info(f"User {user_id} clicked on verify button.")
 
-        await interaction.response.send_modal(modal)
+        try:
+            if is_id_pending(user_id):
+                log_info(f"User {user_id} has a pending verification.")
+                modal = VerificationCodeInputModal()
+            elif is_id_verified(user_id):
+                log_info(f"User {user_id} is already verified.")
+                await interaction.response.send_message(
+                    "Email is already verified", ephemeral=True
+                )
+                return
+            else:
+                log_info(f"User {user_id} needs to input email for verification.")
+                modal = EmailInputModal()
+
+            await interaction.response.send_modal(modal)
+
+        except Exception as e:
+            log_exception(f"Error during verification process for user {user_id}: {e}")
+            await interaction.response.send_message(
+                "An error occurred while processing your request.", ephemeral=True
+            )
 
 
 class Client(discord.Client):
     async def on_ready(self):
-        print(f"Logged in as {self.user}")
+        log_info(f"Logged in as {self.user}")
 
-        verification_channel = self.get_channel(VERIFICATION_CHANNEL_ID)
+        try:
+            verification_channel = self.get_channel(VERIFICATION_CHANNEL_ID)  # type: ignore
 
-        if verification_channel is None:
-            raise RuntimeError("Verification channel not found.")
+            if verification_channel is None:
+                log_error(
+                    f"Verification channel with ID {VERIFICATION_CHANNEL_ID} not found."
+                )
+                raise RuntimeError("Verification channel not found.")
 
-        if not isinstance(verification_channel, discord.TextChannel):
-            raise RuntimeError("Verification channel is not a text channel.")
+            if not isinstance(verification_channel, discord.TextChannel):
+                log_error(
+                    f"Verification channel with ID {VERIFICATION_CHANNEL_ID} is not a text channel."
+                )
+                raise RuntimeError("Verification channel is not a text channel.")
 
-        await verification_channel.purge(check=lambda m: m.author == self.user)
+            await verification_channel.purge(check=lambda m: m.author == self.user)
+            log_info("Purged previous verification messages.")
 
-        verification_message = "Click to verify your university email."
-        await verification_channel.send(content=verification_message, view=View())
-        print("Verification message sent to channel.")
+            verification_message = "Click to verify your university email."
+            await verification_channel.send(content=verification_message, view=View())
+            log_info("Verification message sent to channel.")
+
+        except Exception as e:
+            log_exception(f"Error during bot startup: {e}")
