@@ -5,44 +5,26 @@ load_dotenv()
 
 default = "Uninitialised"
 
-DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", default)
-VERIFICATION_CHANNEL_ID = os.getenv("VERIFICATION_CHANNEL_ID", default)
-SENDER_EMAIL = os.getenv("SENDER_EMAIL", default)
-SENDER_EMAIL_PASSWORD = os.getenv("SENDER_EMAIL_PASSWORD", default)
-EMAIL_DOMAIN = os.getenv("EMAIL_DOMAIN", default)
-VERIFIED_ROLE_ID = int(os.getenv("VERIFIED_ROLE_ID", 0))
 
-if DISCORD_BOT_TOKEN == default:
-    raise RuntimeError(
-        "Bot token not found. Please set DISCORD_BOT_TOKEN in your .env file."
-    )
+def get_env_variable(var_name, default_value=default, cast_type=None):
+    value = os.getenv(var_name, default_value)
+    if value == default_value:
+        raise RuntimeError(
+            f"{var_name} not found. Please set {var_name} in your .env file."
+        )
 
-if VERIFICATION_CHANNEL_ID == default:
-    raise RuntimeError(
-        "Verification channel ID not found. Please set VERIFICATION_CHANNEL_ID in your .env file."
-    )
+    if cast_type:
+        try:
+            return cast_type(value)
+        except ValueError:
+            raise ValueError(f"{var_name} must be a valid {cast_type.__name__}.")
 
-if SENDER_EMAIL == default:
-    raise RuntimeError(
-        "Sender email not found. Please set SENDER_EMAIL in your .env file."
-    )
+    return value
 
-if SENDER_EMAIL_PASSWORD == default:
-    raise RuntimeError(
-        "Sender email password not found. Please set SENDER_EMAIL_PASSWORD in your .env file."
-    )
 
-if EMAIL_DOMAIN == default:
-    raise RuntimeError(
-        "Email domain not found. Please set EMAIL_DOMAIN in your .env file."
-    )
-
-if VERIFIED_ROLE_ID == 0:
-    raise RuntimeError(
-        "Verified role id not found. Please set VERIFIED_ROLE_ID in your .env file."
-    )
-
-try:
-    VERIFICATION_CHANNEL_ID = int(VERIFICATION_CHANNEL_ID)
-except ValueError:
-    raise ValueError("VERIFICATION_CHANNEL_ID must be a valid integer.")
+DISCORD_BOT_TOKEN = get_env_variable("DISCORD_BOT_TOKEN", cast_type=str)
+VERIFICATION_CHANNEL_ID = get_env_variable("VERIFICATION_CHANNEL_ID", cast_type=int)
+SENDER_EMAIL = get_env_variable("SENDER_EMAIL", cast_type=str)
+SENDER_EMAIL_PASSWORD = get_env_variable("SENDER_EMAIL_PASSWORD", cast_type=str)
+EMAIL_DOMAIN = get_env_variable("EMAIL_DOMAIN", cast_type=str)
+VERIFIED_ROLE_ID = get_env_variable("VERIFIED_ROLE_ID", cast_type=int)
