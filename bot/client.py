@@ -107,7 +107,7 @@ class VerificationCodeInputModal(discord.ui.Modal, title="Verify University Emai
 
 class View(discord.ui.View):
     def __init__(self):
-        super()__init__(timeout=None)
+        super().__init__(timeout=None)
 
     @discord.ui.button(label="Verify University Email", style=discord.ButtonStyle.green)
     async def callback(self, interaction: discord.Interaction, button):
